@@ -32,9 +32,19 @@ public class WebServer {
 
 				//TODO: map to local disk, depending on root 
 
+				//filter get query string
+				String getQueryString = "";
+				String filenameArray[] = filename.split("\\?");
+				if (filenameArray.length > 1) {
+					filename = filenameArray[0];
+					getQueryString = filenameArray[1];
+					getQueryString = getQueryString.replaceAll("&", " ");
+				}
+
 				String envRequestMethod = "REQUEST_METHOD=GET";
-				String envQueryString = "QUERY_STRING=''";
-				executeGETRequest(filename, output);
+				String envQueryString = "QUERY_STRING=" + getQueryString;
+
+				executeGETRequest(filename, output, getQueryString);
 			}
 			
 			else if (fields[0].equals("POST")) {
@@ -114,7 +124,7 @@ public class WebServer {
 		return new String(byteArr);
 	}
 
-	private static void executeGETRequest(String filename, DataOutputStream output) throws Exception {
+	private static void executeGETRequest(String filename, DataOutputStream output, String getQueryString) throws Exception {
 		byte[] buffer = new byte[0];
 		int size = 0;
 		String contentType = "";
@@ -144,7 +154,7 @@ public class WebServer {
 		}
 		else if (filename.endsWith("pl")) {
 			
-			Process process = Runtime.getRuntime().exec("/usr/bin/perl " + filename);
+			Process process = Runtime.getRuntime().exec("/usr/bin/perl " + filename + " " + getQueryString);
 			InputStream processIS = process.getInputStream();
 			byte byteInput = (byte) processIS.read();
 
