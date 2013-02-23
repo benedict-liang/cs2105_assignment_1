@@ -5,6 +5,9 @@ import java.lang.*;
 
 public class WebServer {
 	
+	//TODO: TAKE IN PORT NUMBER AS COMMAND LINE ARGUMENT
+	//TODO: HANDLE MULTIPART/FORM-DATA
+	
 	public static void main (String args[]) throws Exception 
 	{
 		ServerSocket serverSocket = new ServerSocket(9092);
