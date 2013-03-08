@@ -6,7 +6,6 @@ import java.lang.*;
 public class WebServer {
 	
 	//TODO: TAKE IN PORT NUMBER AS COMMAND LINE ARGUMENT
-	//TODO: ADD ENV VARIABLES
 	
 	public static void main (String args[]) throws Exception 
 	{
@@ -35,26 +34,32 @@ public class WebServer {
 				//TODO: map to local disk, depending on root 
 
 				//filter get query string
-				String getQueryString = "";
+				String queryStringGET = "";
 				String filenameArray[] = filename.split("\\?");
 				if (filenameArray.length > 1) {
 					filename = filenameArray[0];
-					getQueryString = filenameArray[1];
-					getQueryString = getQueryString.replaceAll("&", " ");
+					queryStringGET = filenameArray[1];
 				}
 
 				String envRequestMethod = "REQUEST_METHOD=GET";
-				String envQueryString = "QUERY_STRING=" + getQueryString;
+				String envQueryString = "QUERY_STRING=" + queryStringGET;
 				String combinedEnvString = envRequestMethod + " " + envQueryString;
 
-				executeGETRequest(filename, output, getQueryString);
+				executeGETRequest(filename, output, queryStringGET, combinedEnvString);
 			}
 			
 			else if (fields[0].equals("POST")) {
-				String postParameters = getPostParameters(br);
-				String[] parametersArray = new String[2];
+				String[] envVariablesArray = new String[2]; 
+				String header = getPOSTHeader(br, envVariablesArray);
 
-				byte[] buffer = executePerlFile(filename, postParameters, parametersArray);
+				//set environment variables
+				String envRequestMethod = "REQUEST_METHOD=POST";
+				String envContentType = "CONTENT_TYPE=" + envVariablesArray[0];
+				String envContentLength = "CONTENT_LENGTH=" + envVariablesArray[1];
+				String combinedEnvString = envRequestMethod + " " + envContentType + " " + envContentLength;
+
+				String[] parametersArray = new String[2];
+				byte[] buffer = executePerlFile(filename, header, parametersArray, combinedEnvString, true);
 				
 				//set content type and size of buffer
 				String contentType = parametersArray[0];
@@ -91,28 +96,36 @@ public class WebServer {
 	}
 
 	/**
-	* Replaces whitespace and '&' with characters that perl can process
-	* 
-	* return escaped string
-	**/
-	private static String replaceSpecialCharacters(String string) {
-		string = string.replaceAll(" ", "+");
-		string = string.replaceAll("&", "%26");
-		return string;
-	}
-
-	/**
 	* Runs the perl file.
 	* Stores content type and buffer size in the parametersArray via referencing.
 	*
 	* return content buffer
 	**/
-	private static byte[] executePerlFile(String filename, String parameters, String[] parametersArray) throws IOException {
+	private static byte[] executePerlFile(String filename, String parameters, String[] parametersArray, String envVariables) throws IOException {
+		return executePerlFile(filename, parameters, parametersArray, envVariables, false);
+	}
+
+	private static byte[] executePerlFile(String filename, String parameters, String[] parametersArray, String envVariables, boolean isPOST) throws IOException {
 		byte[] buffer = new byte[0];
-		String command = "/usr/bin/perl " + filename + " " + parameters;
-		Process process = Runtime.getRuntime().exec(command);
+		String command = "/usr/bin/env " + envVariables + " ";
+		Process process = null;
+
+		if (!isPOST) {
+			command += "/usr/bin/perl " + filename + " " + parameters;
+			process = Runtime.getRuntime().exec(command);
+		}
+		else {
+			command += "/usr/bin/perl " + filename;
+			process = Runtime.getRuntime().exec(command);
+			OutputStream processOS = process.getOutputStream();
+			DataOutputStream processOutput = new DataOutputStream(processOS);
+
+			processOutput.writeBytes(parameters);
+			processOutput.close();
+		}
 
 		InputStream processIS = process.getInputStream();
+
 		byte byteInput = (byte) processIS.read();
 		if (byteInput !=-1) {
 			ArrayList<Byte> contentTypeArr = new ArrayList<Byte>();
@@ -153,7 +166,7 @@ public class WebServer {
 	* Executes GET request for file types: .css, .gif, and .pl.
 	*
 	**/
-	private static void executeGETRequest(String filename, DataOutputStream output, String queryStringGET) throws Exception {
+	private static void executeGETRequest(String filename, DataOutputStream output, String queryStringGET, String envVariables) throws Exception {
 		boolean isFileCSS = filename.endsWith("css");
 		boolean isFileGif = filename.endsWith("gif");
 		boolean isFilePl = filename.endsWith("pl");
@@ -164,7 +177,7 @@ public class WebServer {
 		
 		if (isFilePl) {
 			String[] parametersArray = new String[2];
-			buffer = executePerlFile(filename, queryStringGET, parametersArray);
+			buffer = executePerlFile(filename, queryStringGET, parametersArray, envVariables);
 
 			//set content type and size of buffer
 			contentType = parametersArray[0];
@@ -210,11 +223,11 @@ public class WebServer {
 	******************************************/
 
 	/**
-	* Represent parameters from both types of POST requests with a key-value pair (key=value).
+	* Obtain header from POST request.
 	*
-	* return POST parameters
+	* return POST header
 	**/
-	private static String getPostParameters(BufferedReader br) throws Exception {
+	private static String getPOSTHeader(BufferedReader br, String[] envVariablesArray) throws Exception {
 		int contentLength = 0;
 		String contentType = "";
 		String inLine = null;
@@ -229,73 +242,23 @@ public class WebServer {
 			}
 		}
 		
-		return filterPostParametersFromBufferedReader(br, contentType, contentLength);
+		envVariablesArray[0] = contentType;
+		envVariablesArray[1] = String.valueOf(contentLength);
+
+		return getPOSTHeaderDataField(br, contentLength);
 	}
 
 	/**
-	* Gets POST parameters after filtering by content-types.
-	* Content-types that are excepted include: "application/x-www-form-urlencoded" and
-	* "multipart/form-data". Since the representations for both types are different in their
-	* respective headers, the filtering process will be different.
+	* Gets POST data field without the response headers from the POST request.
 	*
-	* return POST parameters
+	* return POST header data field
 	**/
-	private static String filterPostParametersFromBufferedReader(BufferedReader br, 
-		String contentType, int contentLength) throws Exception {
+	private static String getPOSTHeaderDataField(BufferedReader br, int contentLength) throws Exception {
 		byte[] byteArr = new byte[contentLength];
 		for (int i=0; i<contentLength; i++) {
 			byteArr[i] = (byte)br.read();
 		}
-		String result = "";
 
-		if (contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
-			result = new String(byteArr);
-		}
-		else if (contentType.equalsIgnoreCase("multipart/form-data;")) {
-			String header = new String(byteArr);
-			result = processMultipartData(header);
-		}
-		return result;
-	}
-
-	/**
-	* Processes the POST query of Content-Type: "multipart/form-data".
-	* The header is processed using knowledge of the basic structure of this type of 
-	* POST query. Filtering is done using String positions (which should be relatively fast
-	* performance wise as compared to REGEX).
-	*
-	* return "multipart/form-data" parameters
-	**/
-	private static String processMultipartData(String header) {
-		String result = "";
-
-		//start and end positions of substring
-		int posStart = 0, posEnd = 0;
-		StringBuffer sb = new StringBuffer();
-
-		while (true) {
-			posStart = header.indexOf("Content-Disposition:", posEnd + 1);
-			posStart = header.indexOf("\"", posStart);
-			if (posStart < posEnd) {
-				break;
-			}
-			posEnd = header.indexOf("\"", posStart + 1);
-			
-			//parameter
-			String substring = header.substring(posStart + 1, posEnd);
-
-			sb = sb.append(substring + "=");
-
-			posStart = header.indexOf("\r\n\r\n", posEnd + 1);
-			posEnd = header.indexOf("------WebKitFormBoundary", posStart + 1);
-			//parameter value
-			substring = header.substring(posStart + 4, posEnd - 2);
-			substring = replaceSpecialCharacters(substring);
-
-			sb = sb.append(substring + " ");
-		}
-
-		result = sb.toString();
-		return result;
+		return new String(byteArr);
 	}
 }
