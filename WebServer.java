@@ -4,12 +4,12 @@ import java.net.*;
 import java.lang.*;
 
 public class WebServer {
-	
-	//TODO: TAKE IN PORT NUMBER AS COMMAND LINE ARGUMENT
-	
+
 	public static void main (String args[]) throws Exception 
 	{
-		ServerSocket serverSocket = new ServerSocket(9092);
+		int portNumber = getPortNumberFromInput(args);
+
+		ServerSocket serverSocket = new ServerSocket(portNumber);
 		while (true) {
 			//accept connection
 			Socket s = serverSocket.accept();
@@ -79,6 +79,18 @@ public class WebServer {
 	/******************************************
 	** Helper Methods
 	******************************************/
+
+	/**
+	* return port number from input,
+	* 		if array length less than 1, exit program
+	**/
+	private static int getPortNumberFromInput(String[] args) {
+		if (args.length < 1) {
+			System.out.println("Please include a port number!");
+			System.exit(0);
+		} 
+		return Integer.parseInt(args[0]);
+	}
 
 	/**
 	* Gets file name from the header field. Processes it by removing the initial slash.
