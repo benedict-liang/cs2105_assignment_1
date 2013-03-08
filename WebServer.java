@@ -91,8 +91,6 @@ public class WebServer {
 				}
 
 			}
-			
-			
 
 			//close socket
 			s.close();
@@ -111,20 +109,76 @@ public class WebServer {
 
 	private static String getPostParameters(BufferedReader br) throws Exception {
 		int contentLength = 0;
+		String contentType = "";
 		String inLine = null;
 		while (((inLine = br.readLine()) != null) && (!(inLine.equals("")))) {
+			if (inLine.startsWith("Content-Type")) {
+				String[] temp = inLine.split(" ");
+				contentType = temp[1];
+			}
 			if (inLine.startsWith("Content-Length")) {
 				String[] temp = inLine.split(" ");
 				contentLength = Integer.parseInt(temp[1]);
 			}
 		}
+		
+		return filterPostParametersFromBufferedReader(br, contentType, contentLength);
+	}
 
+	private static String filterPostParametersFromBufferedReader(BufferedReader br, 
+		String contentType, int contentLength) throws Exception {
 		byte[] byteArr = new byte[contentLength];
 		for (int i=0; i<contentLength; i++) {
 			byteArr[i] = (byte)br.read();
 		}
+		String result = "";
 
-		return new String(byteArr);
+		if (contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
+			result = new String(byteArr);
+		}
+		else if (contentType.equalsIgnoreCase("multipart/form-data;")) {
+			String header = new String(byteArr);
+
+			System.out.println("header:\n" + header);
+
+			//start and end positions of substring
+			int posStart = 0, posEnd = 0;
+			StringBuffer sb = new StringBuffer();
+
+			while (true) {
+				posStart = header.indexOf("Content-Disposition:", posEnd + 1);
+				posStart = header.indexOf("\"", posStart);
+				if (posStart < posEnd) {
+					break;
+				}
+				posEnd = header.indexOf("\"", posStart + 1);
+				
+				//parameter
+				String substring = header.substring(posStart + 1, posEnd);
+				System.out.println(substring);
+				sb = sb.append(substring + "=");
+				System.out.println("result: " + sb.length());
+
+				posStart = header.indexOf("\r\n\r\n", posEnd + 1);
+				posEnd = header.indexOf("------WebKitFormBoundary", posStart + 1);
+				//parameter value
+				substring = header.substring(posStart + 4, posEnd - 2);
+				substring = replaceSpecialCharacters(substring);
+				System.out.println(substring);
+				sb = sb.append(substring + " ");
+				System.out.println("result: " + sb.length());
+			}
+
+			result = sb.toString();
+		}
+		System.out.println("result: " + result + " length: " + result.length());
+		return result;
+	}
+
+	private static String replaceSpecialCharacters(String string) {
+		string = string.replaceAll(" ", "+");
+		string = string.replaceAll("&", "%26");
+		return string;
 	}
 
 	private static void executeGETRequest(String filename, DataOutputStream output, String getQueryString) throws Exception {
