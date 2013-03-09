@@ -88,8 +88,19 @@ public class WebServer {
 		if (args.length < 1) {
 			System.out.println("Please include a port number!");
 			System.exit(0);
-		} 
-		return Integer.parseInt(args[0]);
+		}
+		try {
+			int portNumber = Integer.parseInt(args[0]);
+			if (portNumber < 1024 || portNumber > 65535) {
+				System.out.println("Port Number not in range.");
+				System.exit(0);
+			}
+			return portNumber;
+		} catch (NumberFormatException e) {
+			System.out.println("Input must be a number.");
+			System.exit(0);
+		}
+		return 0;
 	}
 
 	/**
