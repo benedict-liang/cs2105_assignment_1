@@ -26,12 +26,10 @@ public class WebServer {
 			String inputString = br.readLine();
 			String fields[] = inputString.split(" ");
 			String filename = getFileName(fields);
+			filename = System.getProperty("user.home") + "/a1/" + filename;
 
-			
 			//get first line
 			if (fields[0].equals("GET")) {
-
-				//TODO: map to local disk, depending on root 
 
 				//filter get query string
 				String queryStringGET = "";
